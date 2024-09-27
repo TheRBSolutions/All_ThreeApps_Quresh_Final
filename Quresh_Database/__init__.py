@@ -1,7 +1,6 @@
 from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash, jsonify
 from werkzeug.utils import secure_filename
 import pandas as pd
-from PIL import Image
 from io import BytesIO
 import os
 from openpyxl import load_workbook
@@ -15,6 +14,21 @@ from sqlalchemy.exc import IntegrityError
 import logging
 from app_factory import db, app  # Import app from app_factory
 from sqlalchemy.sql import func
+from PIL import Image
+from reportlab.lib.utils import ImageReader
+from reportlab.lib.units import inch
+from io import BytesIO
+from PIL import Image as PILImage
+from reportlab.lib.pagesizes import letter, landscape
+from flask import render_template, request, Blueprint, url_for, flash, redirect, send_file
+# from myproject.models import Product
+# from myproject.project1.forms import ProductForm, ExcelForm
+import pandas as pd
+from io import BytesIO
+import os
+from flask import current_app
+from app_factory import db
+
 
 project1 = Blueprint('excel_to_db', __name__, template_folder='templates', static_folder='static')
 
@@ -40,10 +54,27 @@ class Product(db.Model):
             last_product = Product.query.order_by(Product.no.desc()).first()
             self.no = (last_product.no + 1) if last_product else 1
 
-@project1.route('/')
+@project1.route('/', methods=['GET'])
 def index():
-    products = Product.query.all()
-    return render_template('Quresh_Database/index.html', products=products)
+    search_query = request.args.get('search', '').strip()
+    if search_query:
+        products = Product.query.filter(
+            db.or_(
+                Product.product_name.ilike(f'%{search_query}%'),
+                Product.unique_model_code.ilike(f'%{search_query}%'),
+                Product.specification.ilike(f'%{search_query}%')
+            )
+        ).all()
+    else:
+        products = Product.query.all()
+    return render_template('Quresh_Database/index.html', products=products, search_query=search_query)
+
+@project1.app_template_filter('highlight')
+def highlight_filter(text, search_term):
+    if not search_term:
+        return text
+    highlighted = text.replace(search_term, f'<span class="highlight">{search_term}</span>')
+    return highlighted
 
 
 @project1.route('/upload_excel', methods=['GET', 'POST'])
@@ -69,52 +100,83 @@ def upload_excel():
 
 @project1.route('/generate_pdf', methods=['POST'])
 def generate_pdf():
+    print("This is the correct generate_pdf function")
     product_ids = request.json.get('product_ids', [])
     products = Product.query.filter(Product.id.in_(product_ids)).all()
     
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    elements = []
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     styles = getSampleStyleSheet()
-
+    
+    # Define column widths as percentages of the page width
+    page_width = landscape(letter)[0] - 40  # Subtracting left and right margins
+    col_widths = [
+        0.15 * page_width,  # Product
+        0.08 * page_width,  # No.
+        0.15 * page_width,  # Unique Model Code
+        0.27 * page_width,  # Specification
+        0.10 * page_width,  # Price
+        0.25 * page_width,  # Image
+    ]
+    
+    # Create table data
+    table_data = [["Product", "No.", "Unique Model Code", "Specification", "Price", "Image"]]  # Header row
+    
     for product in products:
-        elements.append(Paragraph(f"Product: {product.product_name}", styles['Heading2']))
-        data = [
-            ["No.", str(product.no)],
-            ["Unique Model Code", product.unique_model_code],
-            ["Specification", product.specification],
-            ["Price", f"${product.price:.2f}"],
+        row = [
+            Paragraph(product.product_name, styles['Normal']),
+            str(product.no),
+            Paragraph(product.unique_model_code, styles['Normal']),
+            Paragraph(product.specification, styles['Normal']),
+            f"${product.price:.2f}",
+            ""  # Placeholder for image
         ]
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.grey),
-            ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (1, 1), (-1, -1), colors.beige),
-            ('TEXTCOLOR', (1, 1), (-1, -1), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 1), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 0),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(table)
-
         if product.image:
-            img = Image(BytesIO(product.image))
-            img.drawHeight = 200
-            img.drawWidth = 200
-            elements.append(img)
-
-        elements.append(PageBreak())
-
+            img_buffer = BytesIO(product.image)
+            img = PILImage.open(img_buffer)
+            img_width, img_height = img.size
+            aspect = img_height / float(img_width)
+            
+            max_width = col_widths[-1]  # Use the width of the image column
+            img_width = min(img_width, max_width)
+            img_height = img_width * aspect
+            
+            temp_img = BytesIO()
+            img.save(temp_img, format='PNG')
+            temp_img.seek(0)
+            
+            img = ReportLabImage(temp_img, width=img_width, height=img_height)
+            row[-1] = img  # Replace placeholder with actual image
+        
+        table_data.append(row)
+    
+    # Create table
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('WORDWRAP', (0, 0), (-1, -1)),  # Enable word wrapping for all cells
+    ]))
+    
+    # Build PDF
+    elements = [table]
     doc.build(elements)
+    
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name='selected_products.pdf', mimetype='application/pdf')
+
 
 @project1.route('/add_product', methods=['GET', 'POST'])
 def add_product():
