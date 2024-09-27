@@ -1,20 +1,11 @@
-from flask import Flask, render_template
-from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate  # Add this import
 import os
-
-app = Flask(__name__)
-app.secret_key = 'ak47ma41'
-CORS(app)
-app.config['SQLALCHEMY_DATABASE_URI'] = r'sqlite:///C:\Users\Usama Ahmed\Documents\Quresh_Kitchen\Quresh_Database\instance\product_database.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get("task2_key")  # Change this to a secure random key
-app.config['UPLOAD_FOLDER'] = 'uploads'
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)  # Add this line to initialize Flask-Migrate
+from flask import render_template
+from app_factory import app, db
 
 
+
+
+# Import and register blueprints
 from Quresh_Database import project1
 from EXCEL_TO_PDF_2 import project2
 from pdf_to_json import project3
@@ -30,6 +21,11 @@ def main_home():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+    
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
+        try:
+            os.makedirs(app.config['UPLOAD_FOLDER'])
+        except OSError as e:
+            print(f"Error creating upload folder: {e}")
+    
     app.run(host="0.0.0.0", debug=True, port=5001)

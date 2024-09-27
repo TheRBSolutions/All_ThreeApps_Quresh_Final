@@ -1,6 +1,4 @@
-import os
-from flask import Flask, render_template, request, send_file, redirect, url_for, flash, jsonify, Blueprint
-from flask_sqlalchemy import SQLAlchemy
+from flask import Blueprint, render_template, request, send_file, redirect, url_for, flash, jsonify
 from werkzeug.utils import secure_filename
 import pandas as pd
 from PIL import Image
@@ -9,19 +7,18 @@ import os
 from openpyxl import load_workbook
 from openpyxl_image_loader import SheetImageLoader
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Image as ReportLabImage, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 import base64
 from sqlalchemy.exc import IntegrityError
 import logging
-import pandas as pd
-from __main__ import app, db
+from app_factory import db, app  # Import app from app_factory
 from sqlalchemy.sql import func
 
 project1 = Blueprint('excel_to_db', __name__, template_folder='templates', static_folder='static')
 
-@app.template_filter('b64encode')
+@project1.app_template_filter('b64encode')
 def b64encode_filter(data):
     if data is None:
         return ''
@@ -48,6 +45,7 @@ def index():
     products = Product.query.all()
     return render_template('Quresh_Database/index.html', products=products)
 
+
 @project1.route('/upload_excel', methods=['GET', 'POST'])
 def upload_excel():
     if request.method == 'POST':
@@ -55,18 +53,19 @@ def upload_excel():
             flash('No file part')
             return redirect(request.url)
         file = request.files['file']
-        if file.filename == '':
+        if file.filename == '':  # Fixed this line
             flash('No selected file')
             return redirect(request.url)
-        if file and file.filename.endswith('.xlsx'):
+        if file and file.filename.endswith('.xlsx'):  # Fixed this line
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
             process_excel(file_path)
-            os.remove(file_path)  # Remove the file after processing
+            os.remove(file_path)
             flash('Excel file processed successfully')
             return redirect(url_for('excel_to_db.index'))
     return render_template('Quresh_Database/upload_excel.html')
+
 
 @project1.route('/generate_pdf', methods=['POST'])
 def generate_pdf():
