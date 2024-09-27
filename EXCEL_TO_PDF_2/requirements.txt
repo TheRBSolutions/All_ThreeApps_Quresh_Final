@@ -1,0 +1,6 @@
+Flask
+pandas
+reportlab
+openpyxl
+Pillow
+beautifulsoup4

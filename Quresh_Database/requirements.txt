@@ -1,0 +1,7 @@
+Flask
+Flask-SQLAlchemy
+pandas
+reportlab
+openpyxl
+Pillow
+beautifulsoup4
