@@ -12,7 +12,6 @@ from reportlab.lib import colors
 import base64
 from sqlalchemy.exc import IntegrityError
 import logging
-from app_factory import db, app  # Import app from app_factory
 from sqlalchemy.sql import func
 from PIL import Image
 from reportlab.lib.utils import ImageReader
@@ -21,14 +20,9 @@ from io import BytesIO
 from PIL import Image as PILImage
 from reportlab.lib.pagesizes import letter, landscape
 from flask import render_template, request, Blueprint, url_for, flash, redirect, send_file
-# from myproject.models import Product
-# from myproject.project1.forms import ProductForm, ExcelForm
-import pandas as pd
-from io import BytesIO
-import os
-from flask import current_app
-from app_factory import db
 
+# Import db from the database module
+from database import db
 
 project1 = Blueprint('excel_to_db', __name__, template_folder='templates', static_folder='static')
 
@@ -53,6 +47,8 @@ class Product(db.Model):
         if not self.no:
             last_product = Product.query.order_by(Product.no.desc()).first()
             self.no = (last_product.no + 1) if last_product else 1
+
+# ... rest of the file remains the same ...
 
 @project1.route('/', methods=['GET'])
 def index():

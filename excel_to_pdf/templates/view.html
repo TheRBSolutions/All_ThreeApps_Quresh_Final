@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>CSV Data Viewer</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .highlight {
+        background-color: yellow !important;
+      }
+      #table_container {
+        overflow-x: auto;
+        max-height: 80vh;
+      }
+      th,
+      td {
+        text-align: center;
+        vertical-align: middle;
+      }
+      td[contenteditable='true']:focus {
+        outline: 2px solid #007bff;
+        background-color: #e9ecef;
+      }
+      #searchInput,
+      #priceIncreaseInput {
+        width: 100%;
+      }
+      .input-group {
+        flex-wrap: nowrap;
+      }
+      .image-upload-cell {
+        position: relative;
+      }
+      .image-upload-cell input[type='file'] {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+      }
+      .image-upload-cell img {
+        max-width: 100px;
+        max-height: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <h1
+        id="csv-data-viewer"
+        class="text-center mt-3"
+        >CSV Data Viewer</h1
+      >
+      <div class="row mb-3">
+        <div class="col-md-3">
+          <input
+            type="text"
+            id="searchInput"
+            class="form-control"
+            placeholder="Search..."
+          />
+          <div class="mb-3">
+            <small
+              id="highlightCount"
+              class="form-text text-muted"
+              >Highlighted cells: 0</small
+            >
+          </div>
+        </div>
+        <div class="col-md-3 text-center">
+          <button
+            id="downloadPdfButton"
+            class="btn btn-primary btn-sm"
+            >Download as PDF</button
+          >
+        </div>
+        <div class="col-md-3">
+          <div class="input-group">
+            <input
+              type="number"
+              id="priceIncreaseInput"
+              class="form-control"
+              placeholder="Increase price by %"
+            />
+            <button
+              id="increasePriceButton"
+              class="btn btn-secondary btn-sm"
+              >Apply</button
+            >
+          </div>
+        </div>
+        <div class="col-md-3">
+          <button
+            id="removeSelectedRowsButton"
+            class="btn btn-danger btn-sm"
+            >Remove Selected Rows</button
+          >
+        </div>
+      </div>
+      <div id="table_container"> {{ table|safe }} </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      $(document).ready(function () {
+        console.log('Document is ready.');
+
+        // Remove middle headers and ensure price is last
+        $('table thead tr th').each(function (index, element) {
+          if (index > 0 && index < $('table thead tr th').length - 1) {
+            $(element).text('');
+          }
+        });
+
+        // Ensure price column is last
+        let priceHeader = $('table thead tr th:contains("Price")');
+        if (priceHeader.length && !priceHeader.is(':last-child')) {
+          priceHeader.appendTo($('table thead tr'));
+          $('table tbody tr').each(function () {
+            $(this)
+              .find('td:eq(' + priceHeader.index() + ')')
+              .appendTo($(this));
+          });
+        }
+
+        // Add checkboxes to each row
+        $('table tbody tr').prepend(
+          '<td><input type="checkbox" class="row-selector"></td>'
+        );
+        $('table thead tr').prepend(
+          '<th><input type="checkbox" id="select-all"></th>'
+        );
+
+        // Convert 'Photo' cells to image upload cells
+        $('table tbody tr').each(function () {
+          let photoCell = $(this).find('td:eq(4)'); // Assuming 'Photo' is the 5th column (index 4)
+          let currentImgSrc = photoCell.find('img').attr('src') || '';
+          photoCell.html(`
+                    <div class="image-upload-cell">
+                        <img src="${currentImgSrc}" alt="Product Image">
+                        <input type="file" accept="image/*">
+                    </div>
+                `);
+        });
+
+        // Select all checkbox functionality
+        $('#select-all').change(function () {
+          $('.row-selector').prop('checked', $(this).prop('checked'));
+        });
+
+        // Remove selected rows
+        $('#removeSelectedRowsButton').click(function () {
+          $('table tbody tr')
+            .filter(function () {
+              return $(this).find('.row-selector:checked').length > 0;
+            })
+            .remove();
+          $('#select-all').prop('checked', false);
+        });
+
+        // Handle image file selection
+        $(document).on(
+          'change',
+          '.image-upload-cell input[type="file"]',
+          function (e) {
+            let file = e.target.files[0];
+            if (file) {
+              let reader = new FileReader();
+              let imgElement = $(this).siblings('img');
+              reader.onload = function (e) {
+                imgElement.attr('src', e.target.result);
+              };
+              reader.readAsDataURL(file);
+
+              // Upload the image to the server
+              let formData = new FormData();
+              formData.append('image', file);
+              $.ajax({
+                url: '/upload_image',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                  console.log('Image uploaded successfully:', response);
+                  imgElement.attr('src', response.image_url);
+                },
+                error: function () {
+                  alert('Error uploading image. Please try again.');
+                },
+              });
+            }
+          }
+        );
+
+        // Double-click to remove similar values
+        $('table tbody td').dblclick(function () {
+          var value = $(this).text().trim();
+          var columnIndex = $(this).index();
+
+          $('table tbody td:nth-child(' + (columnIndex + 1) + ')').each(
+            function () {
+              if ($(this).text().trim() === value) {
+                $(this).text('');
+              }
+            }
+          );
+        });
+
+        // Search and highlight matching cells
+        $('#searchInput').on('input', function () {
+          let searchTerm = $(this).val().toLowerCase();
+          $('td').removeClass('highlight');
+          let highlightCount = 0;
+
+          if (searchTerm) {
+            $('td').each(function () {
+              let cellText = $(this).text().toLowerCase();
+              if (cellText.includes(searchTerm)) {
+                $(this).addClass('highlight');
+                highlightCount++;
+              }
+            });
+          }
+
+          $('#highlightCount').text(`Highlighted cells: ${highlightCount}`);
+        });
+
+        // Increase prices by a percentage
+        $('#increasePriceButton').click(function () {
+          let percentage = parseFloat($('#priceIncreaseInput').val());
+          if (isNaN(percentage) || percentage <= 0) {
+            alert('Please enter a valid percentage.');
+            return;
+          }
+
+          $('table tbody tr').each(function () {
+            let priceCell = $(this).find('td:last');
+            if (priceCell.length) {
+              let price = parseFloat(priceCell.text());
+              if (!isNaN(price)) {
+                let increasedPrice = price * (1 + percentage / 100);
+                priceCell.text(increasedPrice.toFixed(2));
+              }
+            }
+          });
+        });
+
+        // Download PDF
+        $('#downloadPdfButton').click(function () {
+          let tableClone = $('table').clone();
+          tableClone.find('th:first-child, td:first-child').remove(); // Remove checkbox column
+
+          // Ensure only first and last headers are preserved and price is last
+          let headers = tableClone.find('thead tr th');
+          headers.each(function (index, element) {
+            if (index > 0 && index < headers.length - 1) {
+              $(element).text('');
+            }
+          });
+          let priceHeader = headers.filter(':contains("Price")');
+          if (priceHeader.length && !priceHeader.is(':last-child')) {
+            priceHeader.appendTo(tableClone.find('thead tr'));
+            tableClone.find('tbody tr').each(function () {
+              $(this)
+                .find('td:eq(' + priceHeader.index() + ')')
+                .appendTo($(this));
+            });
+          }
+
+          // Update image sources to server paths and log information
+          tableClone.find('.image-upload-cell img').each(function () {
+            let imgSrc = $(this).attr('src');
+            console.log('Original image src:', imgSrc);
+            if (imgSrc && !imgSrc.startsWith('/excel_to_pdf/static')) {
+              let serverPath = imgSrc.split('/').pop();
+              let newSrc = '/excel_to_pdf/static/uploads/' + serverPath;
+              $(this).attr('src', newSrc);
+              console.log('Updated image src:', newSrc);
+            }
+          });
+
+          // Remove empty columns and rows (keep your existing code for this)
+
+          // Log the final HTML being sent
+          console.log('Table HTML being sent:', tableClone.prop('outerHTML'));
+
+          $.ajax({
+            url: "{{ url_for('excel_to_pdf.download_pdf') }}",
+            method: 'POST',
+            data: { table_data: tableClone.prop('outerHTML') },
+            xhrFields: {
+              responseType: 'blob',
+            },
+            success: function (data) {
+              console.log('PDF data received');
+              var blob = new Blob([data], { type: 'application/pdf' });
+              var link = document.createElement('a');
+              link.href = window.URL.createObjectURL(blob);
+              link.download = 'table_data.pdf';
+              link.click();
+              window.URL.revokeObjectURL(link.href);
+              console.log('PDF download initiated');
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+              console.error('Error generating PDF:', textStatus, errorThrown);
+              alert(
+                'Error generating PDF. Please check the console for more information.'
+              );
+            },
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
