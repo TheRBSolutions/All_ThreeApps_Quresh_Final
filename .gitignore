@@ -1,0 +1,7 @@
+# Ignore everything in the 'uploads' folder and its subfolders
+uploads/
+
+# Ignore the 'venv' folder
+venv/
+
+product_database.db
