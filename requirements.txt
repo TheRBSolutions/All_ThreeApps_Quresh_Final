@@ -23,6 +23,7 @@ openpyxl==3.1.5
 openpyxl-image-loader==1.0.5
 packaging==24.1
 pandas==2.2.2
+Flask-Migrate==4.0.5
 pdfservices-sdk==4.0.0
 pillow==10.4.0
 Pygments==2.18.0

@@ -14,16 +14,28 @@ from adobe.pdfservices.operation.pdfjobs.result.extract_pdf_result import Extrac
 
 logging.basicConfig(level=logging.INFO)
 
+
 class ExtractTextTableInfoWithFiguresTablesRenditionsFromPDF:
+    """
+    Class to extract text, tables, figures, and renditions from a PDF file using Adobe PDF Services.
+    """
+
     def __init__(self, file):
+        """
+        Initialize the extractor with the given PDF file.
+
+        :param file: A file-like object representing the PDF to be processed.
+        """
+        self.result = None
+        self.stream_asset: StreamAsset = None
         try:
             input_stream = file.read()
+            file.seek(0)
 
             credentials = ServicePrincipalCredentials(
                 client_id=str(os.getenv('PDF_SERVICES_CLIENT_ID')),
                 client_secret=str(os.getenv('PDF_SERVICES_CLIENT_SECRET'))
             )
-
             pdf_services = PDFServices(credentials=credentials)
             input_asset = pdf_services.upload(input_stream=input_stream, mime_type=PDFServicesMediaType.PDF)
 
@@ -37,11 +49,18 @@ class ExtractTextTableInfoWithFiguresTablesRenditionsFromPDF:
             pdf_services_response = pdf_services.get_job_result(location, ExtractPDFResult)
 
             result_asset: CloudAsset = pdf_services_response.get_result().get_resource()
-            self.stream_asset: StreamAsset = pdf_services.get_content(result_asset)
-
+            self.stream_asset = pdf_services.get_content(result_asset)
         except (ServiceApiException, ServiceUsageException, SdkException) as e:
-            logging.exception(f'Exception encountered while executing operation: {e}')
+            logging.exception('Exception encountered while executing operation: %s', e)
             raise
 
     def get_result(self):
-        return self.stream_asset.get_input_stream()
+        """
+        Retrieve the extracted content from the PDF.
+
+        :return: Input stream of the extracted content or None if extraction failed.
+        """
+        if self.stream_asset:
+            return self.stream_asset.get_input_stream()
+        else:
+            return None
