@@ -1,4 +1,4 @@
-#!/home/rb/Desktop/Quraish_traders-main/venv/bin/python3
+#!/home/rb/Desktop/quraish_traders_main/venv/bin/python3
 
 # Copyright: This module has been placed in the public domain.
 

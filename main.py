@@ -4,7 +4,7 @@ from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
-from database import db
+from Quresh_Database.database import db
 
 migrate = Migrate()
 cors = CORS()
@@ -65,4 +65,4 @@ if __name__ == '__main__':
     
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
-    app.run(host="0.0.0.0", debug=True, port=8080)
+    app.run(host="0.0.0.0", debug=True, port=5100)

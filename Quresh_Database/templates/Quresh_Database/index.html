@@ -35,12 +35,8 @@
                 <tr>
                     <th>Select</th>
                     <th>No.</th>
-                    <th>Unique Model Code</th>
-                    <th>Product Name</th>
-                    <th>Image</th>
-                    <th>Specification</th>
+                    <th>Details</th>
                     <th>Price</th>
-                    <th>Additional Info</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -49,18 +45,8 @@
                 <tr>
                     <td><input type="checkbox" class="product-select" data-id="{{ product.id }}"></td>
                     <td>{{ product.no }}</td>
-                    <td>{{ product.unique_model_code | highlight(search_query) | safe }}</td> 
-                    <td>{{ product.product_name | highlight(search_query) | safe }}</td> 
-                    <td>
-                        {% if product.image %}
-                        <img src="data:image/jpeg;base64,{{ product.image | b64encode }}" alt="{{ product.product_name }}" style="max-width: 100px; max-height: 100px;">
-                        {% else %}
-                        No Image
-                        {% endif %}
-                    </td>
-                    <td>{{ product.specification | highlight(search_query) | safe }}</td> 
+                    <td>{{ product.details | highlight(search_query) | safe }}</td>
                     <td>${{ product.price }}</td>
-                    <td>{{ product.additional_info }}</td>
                     <td>
                         <a href="{{ url_for('excel_to_db.edit_product', product_id=product.id) }}" class="btn btn-sm btn-warning">Edit</a>
                         <form action="{{ url_for('excel_to_db.delete_product', product_id=product.id) }}" method="post" style="display:inline;">

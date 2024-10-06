@@ -1,4 +1,4 @@
-#!/home/rb/Desktop/Quraish_traders-main/venv/bin/python3
+#!/home/rb/Desktop/quraish_traders_main/venv/bin/python3
 # :Copyright: © 2015 Günter Milde.
 # :License: Released under the terms of the `2-Clause BSD license`_, in short:
 #

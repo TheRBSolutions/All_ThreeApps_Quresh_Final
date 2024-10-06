@@ -20,9 +20,12 @@ from io import BytesIO
 from PIL import Image as PILImage
 from reportlab.lib.pagesizes import letter, landscape
 from flask import render_template, request, Blueprint, url_for, flash, redirect, send_file
+from Quresh_Database.database import db
+from datetime import datetime
+from .models import Product
 
 # Import db from the database module
-from database import db
+from Quresh_Database.database import db
 
 project1 = Blueprint('excel_to_db', __name__, template_folder='templates', static_folder='static')
 
@@ -32,23 +35,7 @@ def b64encode_filter(data):
         return ''
     return base64.b64encode(data).decode('utf-8')
 
-class Product(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    no = db.Column(db.Integer, unique=True, nullable=False)
-    unique_model_code = db.Column(db.String(50), unique=True, nullable=False)
-    image = db.Column(db.LargeBinary)
-    product_name = db.Column(db.String(100), nullable=False)
-    specification = db.Column(db.Text)
-    price = db.Column(db.Float, nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
-    def __init__(self, **kwargs):
-        super(Product, self).__init__(**kwargs)
-        if not self.no:
-            last_product = Product.query.order_by(Product.no.desc()).first()
-            self.no = (last_product.no + 1) if last_product else 1
-
-# ... rest of the file remains the same ...
 
 @project1.route('/', methods=['GET'])
 def index():
@@ -101,7 +88,6 @@ def upload_excel():
 
 @project1.route('/generate_pdf', methods=['POST'])
 def generate_pdf():
-    print("This is the correct generate_pdf function")
     product_ids = request.json.get('product_ids', [])
     products = Product.query.filter(Product.id.in_(product_ids)).all()
     
@@ -112,43 +98,20 @@ def generate_pdf():
     # Define column widths as percentages of the page width
     page_width = landscape(letter)[0] - 40  # Subtracting left and right margins
     col_widths = [
-        0.15 * page_width,  # Product
-        0.08 * page_width,  # No.
-        0.15 * page_width,  # Unique Model Code
-        0.27 * page_width,  # Specification
-        0.10 * page_width,  # Price
-        0.25 * page_width,  # Image
+        0.15 * page_width,  # No.
+        0.70 * page_width,  # Details
+        0.15 * page_width,  # Price
     ]
     
     # Create table data
-    table_data = [["Product", "No.", "Unique Model Code", "Specification", "Price", "Image"]]  # Header row
+    table_data = [["No.", "Details", "Price"]]  # Header row
     
     for product in products:
         row = [
-            Paragraph(product.product_name, styles['Normal']),
             str(product.no),
-            Paragraph(product.unique_model_code, styles['Normal']),
-            Paragraph(product.specification, styles['Normal']),
-            f"${product.price:.2f}",
-            ""  # Placeholder for image
+            Paragraph(product.details if product.details else str(product.no), styles['Normal']),
+            f"${product.price:.2f}"
         ]
-        if product.image:
-            img_buffer = BytesIO(product.image)
-            img = PILImage.open(img_buffer)
-            img_width, img_height = img.size
-            aspect = img_height / float(img_width)
-            
-            max_width = col_widths[-1]  # Use the width of the image column
-            img_width = min(img_width, max_width)
-            img_height = img_width * aspect
-            
-            temp_img = BytesIO()
-            img.save(temp_img, format='PNG')
-            temp_img.seek(0)
-            
-            img = ReportLabImage(temp_img, width=img_width, height=img_height)
-            row[-1] = img  # Replace placeholder with actual image
-        
         table_data.append(row)
     
     # Create table
@@ -157,7 +120,7 @@ def generate_pdf():
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Changed to TOP alignment for better readability of long text
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
@@ -253,41 +216,30 @@ def update_image(product_id):
 def process_excel(file_path):
     with current_app.app_context():
         try:
-            # Skip the first 2 rows (headers) and use the 3rd row as column names
-            df = pd.read_excel(file_path, skiprows=2, header=0)
-
-            df = df.rename(columns={
-                'Unnamed: 1': 'unique_model_code',
-                'Unnamed: 2': 'product_name',
-                'Unnamed: 4': 'specification',
-                'USD': 'price'
-            })
-
-            workbook = load_workbook(file_path)
-            sheet = workbook.active
-            image_loader = SheetImageLoader(sheet)
+            df = pd.read_excel(file_path, header=None)
             skipped_rows = 0
             processed_rows = 0
 
-            for i, (_, row) in enumerate(df.iterrows(), start=4):
+            for _, row in df.iloc[1:].iterrows():
                 try:
-                    if not _is_valid_row(row):
-                        current_app.logger.warning(f"Skipping row with invalid unique_model_code: {row}")
+                    if pd.notna(row[0]) and str(row[0]).strip().isdigit():
+                        no = int(row[0])
+                        details = ' '.join(str(cell) for cell in row[1:-1] if pd.notna(cell))
+                        price = float(row.iloc[-1]) if pd.notna(row.iloc[-1]) else 0
+                        
+                        product = Product(
+                            no=no,
+                            details=details,
+                            price=price
+                        )
+
+                        db.session.add(product)
+                        db.session.flush()
+                        processed_rows += 1
+                    else:
+                        current_app.logger.warning(f"Skipping non-product row: {row}")
                         skipped_rows += 1
-                        continue
 
-                    image = _get_image(image_loader, i)
-                    file = _prepare_image_file(image) if image else None
-
-                    product = _create_product(row, file)
-                    db.session.add(product)
-                    db.session.flush()
-                    processed_rows += 1
-
-                except IntegrityError:
-                    db.session.rollback()
-                    current_app.logger.warning(f"Skipping row with duplicate unique_model_code: {row['unique_model_code']}")
-                    skipped_rows += 1
                 except Exception as e:
                     db.session.rollback()
                     current_app.logger.error(f"Error processing row: {row}", exc_info=True)
