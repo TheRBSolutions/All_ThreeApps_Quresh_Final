@@ -23,6 +23,10 @@ def create_app():
     
     app.config['UPLOAD_FOLDER'] = os.path.join(basedir, 'static', 'uploads')
     app.config['EXCEL_TO_PDF_UPLOAD_FOLDER'] = os.path.join(basedir, 'static', 'uploads')
+
+     # Logo configuration
+    app.config['LOGO_FOLDER'] = basedir
+    app.config['LOGO_FILENAME'] = 'logo.jpeg'  # Replace with your actual logo filename
     
     # Initialize extensions with app
     db.init_app(app)
@@ -42,6 +46,9 @@ def create_app():
     def main_home():
        return render_template("home.html")
 
+     # Logo serving route
+    
+
 
     return app
 
@@ -58,4 +65,4 @@ if __name__ == '__main__':
     
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
-    app.run(host="0.0.0.0", debug=True, port=5005)
+    app.run(host="0.0.0.0", debug=True, port=8080)
