@@ -23,6 +23,7 @@ from flask import render_template, request, Blueprint, url_for, flash, redirect,
 from Quresh_Database.database import db
 from datetime import datetime
 from .models import Product
+import shutil
 
 # Import db from the database module
 from Quresh_Database.database import db
@@ -31,9 +32,9 @@ project1 = Blueprint('excel_to_db', __name__, template_folder='templates', stati
 
 @project1.app_template_filter('b64encode')
 def b64encode_filter(data):
-    if data is None:
-        return ''
-    return base64.b64encode(data).decode('utf-8')
+    if data:
+        return base64.b64encode(data).decode('utf-8')
+    return ''
 
 
 
@@ -43,9 +44,8 @@ def index():
     if search_query:
         products = Product.query.filter(
             db.or_(
-                Product.product_name.ilike(f'%{search_query}%'),
-                Product.unique_model_code.ilike(f'%{search_query}%'),
-                Product.specification.ilike(f'%{search_query}%')
+                Product.details.ilike(f'%{search_query}%'),
+                Product.price.cast(db.String).ilike(f'%{search_query}%')
             )
         ).all()
     else:
@@ -216,36 +216,77 @@ def update_image(product_id):
 def process_excel(file_path):
     with current_app.app_context():
         try:
-            df = pd.read_excel(file_path, header=None)
+            wb = load_workbook(file_path)
+            sheet = wb.active
+            
+            temp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp_images')
+            if os.path.exists(temp_folder):
+                shutil.rmtree(temp_folder)
+            os.makedirs(temp_folder)
+
             skipped_rows = 0
             processed_rows = 0
 
-            for _, row in df.iloc[1:].iterrows():
+            for row in sheet.iter_rows(min_row=2):  # Assume first row is header
                 try:
-                    if pd.notna(row[0]) and str(row[0]).strip().isdigit():
-                        no = int(row[0])
-                        details = ' '.join(str(cell) for cell in row[1:-1] if pd.notna(cell))
-                        price = float(row.iloc[-1]) if pd.notna(row.iloc[-1]) else 0
+                    if row[0].value and str(row[0].value).strip().isdigit():
+                        no = int(row[0].value)
+                        details = []
+                        image_data = None
+
+                        # Process all columns except the first (no) and last (price)
+                        for cell in row[1:-1]:
+                            if cell.value:
+                                details.append(str(cell.value))
                         
+                        # Check for image in the row
+                        image_processed = False
+                        for image in sheet._images:
+                            if image.anchor._from.row == row[0].row - 1:  # openpyxl rows are 0-indexed
+                                try:
+                                    img = Image.open(image.ref)
+                                    image_filename = f"{no}.png"  # Use 'no' as the image filename
+                                    img.save(os.path.join(temp_folder, image_filename))
+                                    
+                                    with open(os.path.join(temp_folder, image_filename), 'rb') as img_file:
+                                        image_data = img_file.read()
+                                    
+                                    image_processed = True
+                                except Exception as img_error:
+                                    current_app.logger.error(f"Error processing image for row {row[0].row}: {str(img_error)}")
+                                break
+
+                        if not image_processed:
+                            current_app.logger.warning(f"Skipping row {row[0].row} due to image processing failure")
+                            skipped_rows += 1
+                            continue
+
+                        details_str = ' '.join(details)
+                        price = float(row[-1].value) if row[-1].value is not None else 0
+
                         product = Product(
                             no=no,
-                            details=details,
-                            price=price
+                            details=details_str,
+                            price=price,
+                            image=image_data
                         )
 
                         db.session.add(product)
-                        db.session.flush()
                         processed_rows += 1
+
                     else:
-                        current_app.logger.warning(f"Skipping non-product row: {row}")
+                        current_app.logger.warning(f"Skipping non-product row: {row[0].row}")
                         skipped_rows += 1
 
                 except Exception as e:
-                    db.session.rollback()
-                    current_app.logger.error(f"Error processing row: {row}", exc_info=True)
+                    current_app.logger.error(f"Error processing row: {row[0].row}", exc_info=True)
                     skipped_rows += 1
 
             db.session.commit()
+
+            # Clean up the temp folder
+            shutil.rmtree(temp_folder)
+
             return processed_rows, skipped_rows
 
         except Exception as e:
