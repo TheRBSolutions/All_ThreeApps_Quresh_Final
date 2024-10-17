@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 import werkzeug
 import re
 import uuid
-from Quresh_Database.database import db
+# from Quresh_Database.database import db
 
 project2 = Blueprint('excel_to_pdf', __name__,
                      template_folder='templates',

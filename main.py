@@ -4,7 +4,7 @@ from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
-from Quresh_Database.database import db
+# from Quresh_Database.database import db
 
 migrate = Migrate()
 cors = CORS()
@@ -28,17 +28,17 @@ def create_app():
     app.config['LOGO_FOLDER'] = basedir
     app.config['LOGO_FILENAME'] = 'logo.jpeg'  # Replace with your actual logo filename
     
-    # Initialize extensions with app
-    db.init_app(app)
-    migrate.init_app(app, db)
-    cors.init_app(app)
+    # # Initialize extensions with app
+    # db.init_app(app)
+    # migrate.init_app(app, db)
+    # cors.init_app(app)
     
-    # Import and register blueprints
-    from Quresh_Database import project1
+    # # Import and register blueprints
+    # from Quresh_Database import project1
     from excel_to_pdf import project2
     from pdf_to_json import project3
 
-    app.register_blueprint(project1, url_prefix="/excel_to_db")
+    # app.register_blueprint(project1, url_prefix="/excel_to_db")
     app.register_blueprint(project2, url_prefix="/excel_to_pdf")
     app.register_blueprint(project3, url_prefix="/PDF_TO_JSON")
     
@@ -60,9 +60,7 @@ for rule in app.url_map.iter_rules():
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
-    
-    
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        # Code to be executed within the application context
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
     app.run(host="0.0.0.0", debug=True, port=5100)
