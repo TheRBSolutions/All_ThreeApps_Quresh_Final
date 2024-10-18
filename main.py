@@ -63,4 +63,4 @@ if __name__ == '__main__':
         # Code to be executed within the application context
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
-    app.run(host="0.0.0.0", debug=True, port=5100)
+    app.run(host="0.0.0.0", debug=False, port=5100)
